@@ -52,6 +52,15 @@
       resolved_upstream_dns: "{{ resolved_status.stdout | regex_findall('DNS Servers: (.*)') | map('trim') | join(' ') | split() }}"
     when: resolved_status.rc == 0
 
+  - name: Wait actively for the management connection to become fully stable
+    ansible.builtin.wait_for_connection:
+      connect_timeout: 5
+      sleep: 1
+      timeout: 45
+
+  - name: Re-gather facts immediately after connection is verified
+    ansible.builtin.setup:
+
   roles:
   - role: interface
     interface_mtu: "{{ hostvars['proxy-jump']['ansible_default_ipv4']['mtu'] }}"
