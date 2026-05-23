@@ -1,6 +1,17 @@
 - name: Sandbox networking for netplan hosts
   hosts: ssh_nodes:!routers:!windows_hosts
   become: true
+
+  pre_tasks:
+    - name: Wait actively for the management connection to become fully stable
+      ansible.builtin.wait_for_connection:
+        connect_timeout: 5
+        sleep: 1
+        timeout: 45
+
+    - name: Re-gather facts immediately after connection is verified
+      ansible.builtin.setup:
+  
   tasks:
     - name: Skip for non-netplan hosts
       ansible.builtin.meta: end_host
