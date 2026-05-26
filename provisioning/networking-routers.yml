@@ -52,14 +52,10 @@
       resolved_upstream_dns: "{{ resolved_status.stdout | regex_findall('DNS Servers: (.*)') | map('trim') | join(' ') | split() }}"
     when: resolved_status.rc == 0
 
-  - name: Wait actively for the management connection to become fully stable
-    ansible.builtin.wait_for_connection:
-      connect_timeout: 5
-      sleep: 1
-      timeout: 45
-
-  - name: Re-gather facts immediately after connection is verified
-    ansible.builtin.setup:
+  - name: Set password for mgmt_user
+    ansible.builtin.user:
+      name: debian
+      password: "{{ 'qwert1234' | password_hash('sha512') }}"    
 
   roles:
   - role: interface
