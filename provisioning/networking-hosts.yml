@@ -10,23 +10,6 @@
     - name: Get user network interface
       set_fact:
         user_network_interface: "{{ ansible_interfaces | map('regex_replace', '^', 'ansible_') | map('extract', vars) | selectattr('ipv4.address', 'defined') | selectattr('ipv4.address', 'eq', user_network_ip) | map(attribute='device') | first }}"
-        management_interface: >-
-          {{
-            (
-              ansible_interfaces
-
-              | map('regex_replace', '^', 'ansible_')
-              | map('extract', vars)
-              | selectattr('ipv4.address', 'defined')
-
-              | selectattr('ipv4.address', 'equalto', ansible_host)
-              | map(attribute='device')
-              | list
-            )
-
-            | first
-            | default('')
-          }}
 
     - name: Create Netplan configuration file
       copy:
@@ -39,7 +22,7 @@
               {{ interface }}:
                 dhcp4: true
                 dhcp4-overrides:
-                  route-metric: {{ 100 if interface == management_interface else 200 }}
+                  route-metric: {{ 100 if interface == user_network_interface else 200 }}
                 dhcp6: false
               {% endfor %}
         dest: /etc/netplan/50-cloud-init.yaml
