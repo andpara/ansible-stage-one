@@ -35,11 +35,49 @@
       msg: "Network unavailable, using existing package cache"
     when: network_test is failed
 
+
 - name: Sandbox networking
   hosts: man:routers
   become: true
+  gather_facts: false
   strategy: host_pinned
+
   pre_tasks:
+
+    - name: Wait for systemd-networkd to finish bringing links up
+      ansible.builtin.command: networkctl wait --timeout=180
+      changed_when: false
+
+    - name: Verify systemd-networkd has IPv4 assigned
+      ansible.builtin.shell: |
+        set -e
+
+        for path in /sys/class/net/*; do
+          i=$(basename "$path")
+
+          [ "$i" = "lo" ] && continue
+          [ ! -d "/sys/class/net/$i/device" ] && continue
+
+          state=$(cat /sys/class/net/$i/operstate)
+          [ "$state" = "down" ] && exit 1
+
+          networkctl status "$i" | grep -q "State: routable" || exit 1
+        done
+      register: net_ready
+      retries: 40
+      delay: 5
+      until: net_ready.rc == 0
+      changed_when: false
+
+    - name: Ensure network is fully stable
+      ansible.builtin.shell: |
+        sleep 3
+        networkctl --no-pager --no-legend list
+      changed_when: false
+
+    - name: Gather facts after network stabilization
+      ansible.builtin.setup:
+      
   - name: Get systemd-resolved status (using command)
     command: resolvectl status
     register: resolved_status
