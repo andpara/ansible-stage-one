@@ -10,12 +10,21 @@
     - name: Get user network interface
       set_fact:
         user_network_interface: "{{ ansible_interfaces | map('regex_replace', '^', 'ansible_') | map('extract', vars) | selectattr('ipv4.address', 'defined') | selectattr('ipv4.address', 'eq', user_network_ip) | map(attribute='device') | first }}"
-  
-    - name: Check user network interface
-      fail:
-        msg: "backend-sandbox-service: user_network_interface could not be determined from user_network_ip={{ user_network_ip }}"
-      when: user_network_interface is not defined or user_network_interface == ''
+        management_interface: >-
+          {{
+            ansible_facts | dict2items
+            | selectattr('value.ipv4.address', 'defined')
+            | selectattr('value.ipv4.address', 'equalto', ansible_host)
+            | map(attribute='key')
+            | first
+            | default('')
+          }}
 
+    - name: Check management interface
+      fail:
+        msg: "backend-sandbox-service: cannot determine management interface"
+      when: management_interface == ''
+          
     - name: Create Netplan configuration file
       copy:
         content: |
@@ -28,7 +37,7 @@
               {{ iface }}:
                 dhcp4: true
                 dhcp4-overrides:
-                  route-metric: {{ 100 if iface == user_network_interface else 200 }}
+                  route-metric: {{ 100 if iface == management_interface else 200 }}
                 dhcp6: false
               {% endfor %}
         dest: /etc/netplan/50-cloud-init.yaml
@@ -36,7 +45,7 @@
         group: root
         mode: '0600'
       register: netplan_config
- 
+     
     - name: Apply Netplan
       command: netplan apply
       when: netplan_config is changed
