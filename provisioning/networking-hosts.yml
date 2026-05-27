@@ -12,14 +12,16 @@
         user_network_interface: "{{ ansible_interfaces | map('regex_replace', '^', 'ansible_') | map('extract', vars) | selectattr('ipv4.address', 'defined') | selectattr('ipv4.address', 'eq', user_network_ip) | map(attribute='device') | first }}"
         management_interface: >-
           {{
-            ansible_facts | dict2items
-            | selectattr('value.ipv4.address', 'defined')
-            | selectattr('value.ipv4.address', 'equalto', ansible_host)
-            | map(attribute='key')
+            ansible_interfaces
+            | map('regex_replace', '^', 'ansible_')
+            | map('extract', vars)
+            | selectattr('ipv4.address', 'defined')
+            | selectattr('ipv4.address', 'equalto', ansible_host)
+            | map(attribute='device')
             | first
             | default('')
           }}
-
+          
     - name: Check management interface
       fail:
         msg: "backend-sandbox-service: cannot determine management interface"
@@ -50,6 +52,20 @@
       command: netplan apply
       when: netplan_config is changed
 
+    - name: Wait for routing to stabilize
+      pause:
+        seconds: 10
+      when: netplan_config is changed
+    
+    - name: Warm up management connectivity
+      shell: |
+        timeout 5 bash -c '</dev/tcp/{{ hostvars["man"]["default_gateway_interface_ip"] }}/22'
+      register: warmup_result
+      retries: 10
+      delay: 3
+      until: warmup_result.rc == 0
+      changed_when: false
+          
 - name: Test sandbox networking
   hosts: ssh_nodes:!routers:!windows_hosts
   tasks:
@@ -59,14 +75,6 @@
     until: ping_result is not failed
     retries: 18
     delay: 10
-
-- name: Warm up MAN to host connectivity
-  hosts: man
-  tasks:
-    - name: Ping sandbox hosts from MAN
-      command: ping -c 2 {{ hostvars[item]["ansible_host"] }}
-      loop: "{{ groups['ssh_nodes'] | difference(groups['routers']) | difference(groups['windows_hosts']) }}"
-      changed_when: false
 
 - name: remove stack name prefix from hostnames of linux hosts
   hosts: ssh_nodes:!routers:!windows_hosts
