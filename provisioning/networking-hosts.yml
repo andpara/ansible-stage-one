@@ -60,6 +60,14 @@
     retries: 18
     delay: 10
 
+- name: Warm up MAN to host connectivity
+  hosts: man
+  tasks:
+    - name: Ping sandbox hosts from MAN
+      command: ping -c 2 {{ hostvars[item]["ansible_host"] }}
+      loop: "{{ groups['ssh_nodes'] | difference(groups['routers']) | difference(groups['windows_hosts']) }}"
+      changed_when: false
+
 - name: remove stack name prefix from hostnames of linux hosts
   hosts: ssh_nodes:!routers:!windows_hosts
   become: true
