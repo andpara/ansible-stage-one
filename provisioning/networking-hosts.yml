@@ -30,12 +30,7 @@
         group: root
         mode: '0600'
       register: netplan_config
-
-    - name: Set password for mgmt_user
-      ansible.builtin.user:
-        name: debian
-        password: "{{ 'qwert1234' | password_hash('sha512') }}"  
-
+ 
     - name: Apply Netplan
       command: netplan apply
       when: netplan_config is changed
