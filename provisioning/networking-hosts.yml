@@ -35,12 +35,17 @@
             version: 2
             ethernets:
               {% set interfaces_sorted = ansible_interfaces | reject('equalto', 'lo') | sort %}
+              {% set ns = namespace(metric=200) %}
+    
               {% for iface in interfaces_sorted %}
               {{ iface }}:
                 dhcp4: true
                 dhcp4-overrides:
-                  route-metric: {{ 100 if iface == management_interface else 200 }}
+                  route-metric: {{ 100 if iface == management_interface else ns.metric }}
                 dhcp6: false
+              {% if iface != management_interface %}
+              {% set ns.metric = ns.metric + 100 %}
+              {% endif %}
               {% endfor %}
         dest: /etc/netplan/50-cloud-init.yaml
         owner: root
@@ -51,20 +56,6 @@
     - name: Apply Netplan
       command: netplan apply
       when: netplan_config is changed
-
-    - name: Wait for routing to stabilize
-      pause:
-        seconds: 10
-      when: netplan_config is changed
-    
-    - name: Warm up management connectivity
-      shell: |
-        timeout 5 bash -c '</dev/tcp/{{ hostvars["man"]["default_gateway_interface_ip"] }}/22'
-      register: warmup_result
-      retries: 10
-      delay: 3
-      until: warmup_result.rc == 0
-      changed_when: false
           
 - name: Test sandbox networking
   hosts: ssh_nodes:!routers:!windows_hosts
