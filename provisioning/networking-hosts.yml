@@ -87,6 +87,49 @@
   - name: Gather facts
     setup:
 
+  - name: Configure Windows interface metrics
+    win_shell: |
+      $ManagementIP = "{{ ansible_host }}"
+      $UserIP = "{{ user_network_ip }}"
+  
+      $ManagementIfIndex = (
+        Get-NetIPAddress -AddressFamily IPv4 |
+        Where-Object IPAddress -eq $ManagementIP |
+        Select-Object -First 1
+      ).InterfaceIndex
+  
+      if (-not $ManagementIfIndex) {
+        throw "Cannot determine management interface for IP $ManagementIP"
+      }
+  
+      # Only sandbox-related interfaces (management + user network)
+      $SandboxIfIndexes = (
+        Get-NetIPAddress -AddressFamily IPv4 |
+        Where-Object {
+          $_.IPAddress -eq $ManagementIP -or
+          $_.IPAddress -eq $UserIP
+        } |
+        Select-Object -ExpandProperty InterfaceIndex -Unique
+      )
+  
+      foreach ($IfIndex in $SandboxIfIndexes) {
+  
+        $DesiredMetric = if ($IfIndex -eq $ManagementIfIndex) { 100 } else { 200 }
+  
+        $Current = Get-NetIPInterface -InterfaceIndex $IfIndex -AddressFamily IPv4
+  
+        if (
+          $Current.InterfaceMetric -ne $DesiredMetric -or
+          $Current.AutomaticMetric -eq "Enabled"
+        ) {
+          Set-NetIPInterface `
+            -InterfaceIndex $IfIndex `
+            -AddressFamily IPv4 `
+            -AutomaticMetric Disabled `
+            -InterfaceMetric $DesiredMetric
+        }
+      }
+
   - name: test sandbox networking
     win_command: 'ping {{ hostvars["man"]["default_gateway_interface_ip"] }}'
     changed_when: false
