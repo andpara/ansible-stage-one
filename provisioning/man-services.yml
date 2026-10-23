@@ -6,15 +6,39 @@
       apt:
         name: chrony
 
+    - name: Check if guacd is installed
+      shell: |
+        command -v guacd >/dev/null 2>&1 ||
+        test -x /usr/local/sbin/guacd ||
+        test -x /usr/sbin/guacd
+      changed_when: false
+      failed_when: false
+      register: guacd_check
     - name: Install guacd
       apt:
         name: guacd
+      when: guacd_check.rc != 0
+      
+    - name: Check which guacd configuration files exist
+      stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/guacamole/guacd.conf
+        - /etc/default/guacd
+      register: file_stats
 
-    - name: Change default listening address of guacd
+    - name: Fail if neither configuration file exists
+      fail:
+        msg: "No guacd configuration file found!"
+      when: file_stats.results | map(attribute='stat.exists') | select('true') | list | length == 0
+
+    - name: Update guacd listening address
       lineinfile:
-        path: /etc/default/guacd
-        regexp: LISTEN_ADDRESS=.*
-        line: LISTEN_ADDRESS=0.0.0.0
+        path: "{{ item.item }}"
+        regexp: "{{ '^bind_host\\s*=' if item.item == '/etc/guacamole/guacd.conf' else '^LISTEN_ADDRESS\\s*=' }}"
+        line: "{{ 'bind_host = 0.0.0.0' if item.item == '/etc/guacamole/guacd.conf' else 'LISTEN_ADDRESS=0.0.0.0' }}"
+      loop: "{{ file_stats.results }}"
+      when: item.stat.exists
       register: guacd_listen_address
 
     - name: Restart guacd.service
